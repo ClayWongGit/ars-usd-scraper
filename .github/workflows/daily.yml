@@ -1,0 +1,91 @@
+name: 每日汇率抓取
+
+on:
+  schedule:
+    # 每日 03:10 UTC (阿根廷时间 00:10)
+    - cron: '10 3 * * *'
+  
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: '开始日期 (YYYY-MM-DD)'
+        required: true
+        default: '2024-01-01'
+        type: string
+      end_date:
+        description: '结束日期 (YYYY-MM-DD)'
+        required: true
+        default: '2024-01-31'
+        type: string
+
+jobs:
+  scrape-rates:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: 设置 Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 创建数据目录
+      run: mkdir -p data
+    
+    - name: 执行抓取
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "执行手动回补: ${{ github.event.inputs.start_date }} 到 ${{ github.event.inputs.end_date }}"
+          python main.py backfill ${{ github.event.inputs.start_date }} ${{ github.event.inputs.end_date }}
+        else
+          echo "执行每日抓取"
+          python main.py yesterday --fallback
+        fi
+    
+    - name: 检查数据变更
+      id: check-changes
+      run: |
+        if [ -f data/rates.csv ]; then
+          echo "数据文件存在"
+          git add data/rates.csv
+          if git diff --staged --quiet; then
+            echo "没有数据变更"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "检测到数据变更"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "数据文件不存在"
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: 提交数据变更
+      if: steps.check-changes.outputs.has_changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          git commit -m "📊 手动回补汇率数据: ${{ github.event.inputs.start_date }} 到 ${{ github.event.inputs.end_date }}"
+        else
+          git commit -m "📈 每日汇率数据更新: $(date +%Y-%m-%d)"
+        fi
+        
+        git push
+    
+    - name: 显示结果
+      run: |
+        echo "任务完成!"
+        if [ -f data/rates.csv ]; then
+          echo "数据文件行数: $(wc -l < data/rates.csv)"
+        fi

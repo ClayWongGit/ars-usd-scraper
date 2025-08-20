@@ -1,0 +1,18 @@
+## 在项目目录运行这些命令 (需要先安装Git)
+
+# 配置Git用户信息 (首次使用时)
+git config --global user.name "您的GitHub用户名"
+git config --global user.email "您的GitHub邮箱"
+
+# 初始化仓库并推送
+git init
+git add .
+git commit -m "初始化ARS to USD汇率抓取器项目"
+
+# 添加远程仓库 (替换为您创建的GitHub仓库地址)
+git remote add origin https://github.com/您的用户名/ars-usd-scraper.git
+git branch -M main
+git push -u origin main
+
+## 完成后 GitHub Actions 将自动每日运行！
+
